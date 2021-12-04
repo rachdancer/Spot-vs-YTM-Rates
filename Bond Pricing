@@ -1,0 +1,211 @@
+pip install QuantLib
+
+def print_ytmcurve(xlist, ylist, precision=3):
+    """
+    Method to print curve in a nice format
+    """
+    print("----------------------")
+    print("Tenor\t   YTM %")
+    print("----------------------")
+    for x,y in zip(xlist, ylist):
+        print(x,"\t\t", round(y, precision))
+    print("----------------------")
+
+def print_spotcurve(xlist, ylist, precision=3):
+    """
+    Method to print curve in a nice format
+    """
+    print("----------------------")
+    print("Tenor\t   Spot %")
+    print("----------------------")
+    for x,y in zip(xlist, ylist):
+        print(x,"\t\t", round(y, precision))
+    print("----------------------")
+
+import QuantLib as ql
+
+#Bloomberg Implied UKT Data (as of 29/01/2021)
+#Outcome: Spot Rate
+
+# Deposit rates
+depo_maturities = [ql.Period(1,ql.Months), ql.Period(3, ql.Months),ql.Period(6, ql.Months)]
+depo_rates = [-0.00052, -0.00024,-0.00005]
+
+# Bond rates
+bond_maturities = [ql.Period(2,ql.Years),ql.Period(5,ql.Years),ql.Period(9,ql.Years),ql.Period(13,ql.Years),
+                   ql.Period(20,ql.Years),ql.Period(30,ql.Years),ql.Period(40,ql.Years),ql.Period(50,ql.Years)]
+bond_rates = [-0.0005773203,0.0023364121,0.00319920563,0.00655744593,0.00826360563,0.00888920563,0.00799920563,0.00711920563]
+
+calc_date = ql.Date(29, 1, 2021)
+ql.Settings.instance().evaluationDate = calc_date
+
+calendar = ql.UnitedKingdom()
+bussiness_convention = ql.Unadjusted
+day_count = ql.Actual360()
+end_of_month = True
+settlement_days = 3
+face_amount = 100
+coupon_frequency = ql.Period(ql.Semiannual)
+settlement_days = 0
+
+depo_helpers = [ql.DepositRateHelper(ql.QuoteHandle(ql.SimpleQuote(r/100.0)),
+                                     m,
+                                     settlement_days,
+                                     calendar,
+                                     bussiness_convention,
+                                     end_of_month,
+                                     day_count )
+                for r, m in zip(depo_rates, depo_maturities)]
+
+bond_helpers = []
+for r, m in zip(bond_rates, bond_maturities):
+    termination_date = calc_date + m
+    schedule = ql.Schedule(calc_date,
+                   termination_date,
+                   coupon_frequency,
+                   calendar,
+                   bussiness_convention,
+                   bussiness_convention,
+                   ql.DateGeneration.Backward,
+                   end_of_month)
+
+    helper = ql.FixedRateBondHelper(ql.QuoteHandle(ql.SimpleQuote(face_amount)),
+                                        settlement_days,
+                                        face_amount,
+                                        schedule,
+                                        [r/100.0],
+                                        day_count,
+                                        bussiness_convention,
+                                        )
+    bond_helpers.append(helper)
+
+rate_helpers = depo_helpers + bond_helpers
+yieldcurve = ql.PiecewiseLogCubicDiscount(calc_date,
+                             rate_helpers,
+                             day_count)
+spots = []
+tenors = []
+for d in yieldcurve.dates():
+    yrs = day_count.yearFraction(calc_date, d)
+    compounding = ql.Compounded
+    freq = ql.Semiannual
+    zero_rate = yieldcurve.zeroRate(yrs, compounding, freq)
+    tenors.append(yrs)
+    eq_rate = zero_rate.equivalentRate(day_count,
+                                       compounding,
+                                       freq,
+                                       calc_date,
+                                       d).rate()
+    spots.append(100*eq_rate)
+    
+ 
+    
+ ### Price Bond (YTM)
+ 
+ from QuantLib import *
+
+# Construct yield curve (YTM Rates)
+calc_date = Date(29, 1, 2021)
+Settings.instance().evaluationDate = calc_date
+
+spot_dates = [Date(29,1,2021), Date(30,1,2026), Date(7,1,2030)]
+spot_rates = [-0.00052, 0.0023364121,0.00319920563]
+
+day_count = SimpleDayCounter()
+calendar = NullCalendar()
+interpolation = Linear()
+compounding = Compounded
+compounding_frequency = Semiannual
+spot_curve = ZeroCurve(spot_dates, spot_rates, day_count, calendar, interpolation, compounding, compounding_frequency)
+
+spot_curve_handle = YieldTermStructureHandle(spot_curve)
+
+# Construct bond schedule
+issue_date = Date(29, 1, 1998)
+maturity_date = Date(7, 12, 2028)
+tenor = Period(Semiannual)
+calendar = NullCalendar()
+business_convention = Unadjusted
+date_generation = DateGeneration.Backward
+month_end = False
+
+schedule = Schedule(issue_date, maturity_date, tenor, calendar, business_convention, business_convention, date_generation, month_end)
+
+# Create FixedRateBond Object
+coupon_rate = 0.06
+coupons = [coupon_rate]
+settlement_days = 0
+face_value = 100
+
+fixed_rate_bond = FixedRateBond(settlement_days,
+                                face_value,
+                                schedule,
+                                coupons,
+                                day_count)
+
+# Set Valuation engine
+bond_engine = DiscountingBondEngine(spot_curve_handle)
+fixed_rate_bond.setPricingEngine(bond_engine)
+
+# Calculate present value
+value = fixed_rate_bond.NPV()
+print(value)
+
+#### RUN TO GET RATES
+
+del spots[0]
+
+print_ytmcurve(depo_maturities+bond_maturities, depo_rates+bond_rates)
+print_spotcurve(depo_maturities+bond_maturities, spots)
+print(spots)
+
+
+#### BOND PRICING 
+### Price Bond (Spot Rates)
+
+# Construct yield curve (Spot Rates)
+calc_date = Date(29, 1, 2021)
+Settings.instance().evaluationDate = calc_date
+
+spot_dates = [Date(29,1,2021), Date(29,1,2028), Date(29,1,2029)]
+spot_rates = [-0.0005199994292048871, 0.0023364926550417664, 0.0031993588546441742]
+
+day_count = SimpleDayCounter()
+calendar = NullCalendar()
+interpolation = Linear()
+compounding = Compounded
+compounding_frequency = Semiannual
+spot_curve = ZeroCurve(spot_dates, spot_rates, day_count, calendar, interpolation, compounding, compounding_frequency)
+
+spot_curve_handle = YieldTermStructureHandle(spot_curve)
+
+# Construct bond schedule
+issue_date = Date(29, 1, 1998)
+maturity_date = Date(7, 12, 2028)
+tenor = Period(Semiannual)
+calendar = NullCalendar()
+business_convention = Unadjusted
+date_generation = DateGeneration.Backward
+month_end = False
+
+schedule = Schedule(issue_date, maturity_date, tenor, calendar, business_convention, business_convention, date_generation, month_end)
+
+# Create FixedRateBond Object
+coupon_rate = 0.06
+coupons = [coupon_rate]
+settlement_days = 0
+face_value = 100
+
+fixed_rate_bond = FixedRateBond(settlement_days,
+                                face_value,
+                                schedule,
+                                coupons,
+                                day_count)
+
+# Set Valuation engine
+bond_engine = DiscountingBondEngine(spot_curve_handle)
+fixed_rate_bond.setPricingEngine(bond_engine)
+
+# Calculate present value
+value = fixed_rate_bond.NPV()
+print(value)
